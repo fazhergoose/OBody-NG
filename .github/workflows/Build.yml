@@ -46,7 +46,12 @@ jobs:
           git submodule status --recursive | Add-Content build-source.txt
       - name: Build OBody on remote runner
         shell: pwsh
-        run: xmake -y OBody
+        run: |
+          # CommonLib auto-fetches a prebuilt whenever GITHUB_ACTIONS is set.
+          # Build its pinned source with this runner's MSVC to avoid STL ABI mismatch.
+          Remove-Item Env:GITHUB_ACTIONS -ErrorAction SilentlyContinue
+          Remove-Item Env:COMMONLIB_PREBUILT -ErrorAction SilentlyContinue
+          xmake -y OBody
       - name: Package DLL-only MO2 override
         shell: pwsh
         run: |
