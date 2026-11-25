@@ -99,6 +99,20 @@ namespace {
     void ClickWithVRTrigger(const RE::ButtonEvent& a_button) {
         if (!IsVRController(a_button.GetDevice()) || a_button.GetIDCode() != kVRTriggerButton) return;
 
+        // TMV VR test 1: the helper pumps the complete mouse-button lifecycle
+        // before NewFrame. Do not inject a second press from this callback:
+        // Framework suppresses callbacks while an ImGui item is active, so
+        // this fallback can receive a press without its matching release.
+        // Keep the upstream fallback when the helper DLL is absent.
+        if (REX::W32::GetModuleHandleA("ImGuiVRHelper.dll")) {
+            static bool logged{false};
+            if (!logged) {
+                logger::info("TMV VR test 1: trigger clicks owned by ImGui VR Helper");
+                logged = true;
+            }
+            return;
+        }
+
         const bool open{UI::PresetList::Window && UI::PresetList::Window->IsOpen.load()};
 
         if (a_button.IsDown() && open && !g_vrTriggerDown) {
@@ -158,6 +172,15 @@ namespace {
     }
 
     void __stdcall OnMenuFrameworkEvent(const SKSEMenuFramework::Model::EventType a_type) {
+        // Framework's Close() clears its own windows, but not AddWindow clients.
+        // A helper close/focus-release must also close OBody's VR window so it
+        // cannot keep input blocked or reopen the overlay on the next frame.
+        if (REL::Module::IsVR() && a_type == SKSEMenuFramework::Model::EventType::kCloseMenu &&
+            UI::PresetList::Window && UI::PresetList::Window->IsOpen.exchange(false)) {
+            g_closeAfterTextInput = false;
+            logger::info("TMV VR test 1: Framework close event closed OBody");
+        }
+
         // The window can be closed without rendering again, by the hotkey or by SKSE Menu Framework itself
         if (UI::PresetList::Window && !UI::PresetList::Window->IsOpen.load()) {
             UI::PreviewPanel::End();
